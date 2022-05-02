@@ -1,75 +1,100 @@
 use std::path::PathBuf;
 
-use bevy::{asset::LoadState, prelude::*};
+use bevy::{
+  asset::LoadState,
+  log::{Level, LogSettings},
+  prelude::*,
+};
 
 fn main() {
   App::new()
-    .add_event::<LoadSceneEvent>()
-    .insert_resource(WindowDescriptor {
-      title: String::from("Bevy Scene Viewer"),
+    .insert_resource(LogSettings {
+      #[cfg(feature = "dev")]
+      level: Level::DEBUG,
       ..default()
     })
+    .insert_resource(WindowDescriptor {
+      title: String::from("Bevy Scene Viewer"),
+      height: 800.0,
+      width: 1000.0,
+      ..default()
+    })
+    .add_startup_system(config)
     .add_plugins(DefaultPlugins)
+    .add_event::<LoadFileEvent>()
+    .insert_resource(AssetsLoading(Vec::default()))
     .add_system(file_drop)
     .add_system(load_scene)
-    .add_system(update_scene_handle)
+    .add_system(check_assets_loading)
     .run();
 }
 
-struct SceneHandle {
-  handle: Handle<Scene>,
-  load_state: LoadState,
+fn config(asset_server: Res<AssetServer>) {
+  #[cfg(feature = "dev")]
+  asset_server.watch_for_changes().unwrap();
 }
 
-impl Default for SceneHandle {
-  fn default() -> Self {
-    Self {
-      handle: Default::default(),
-      load_state: LoadState::NotLoaded,
-    }
-  }
-}
+struct LoadFileEvent(PathBuf);
 
-struct LoadSceneEvent(PathBuf);
+#[derive(Debug)]
+struct AssetsLoading(Vec<HandleUntyped>);
 
 fn file_drop(
   mut events: EventReader<FileDragAndDrop>,
-  mut load_scene_event: EventWriter<LoadSceneEvent>,
+  mut load_scene_event: EventWriter<LoadFileEvent>,
 ) {
   for event in events.iter().last() {
     if let FileDragAndDrop::DroppedFile { path_buf, .. } = event {
-      load_scene_event.send(LoadSceneEvent(path_buf.to_owned()));
+      load_scene_event.send(LoadFileEvent(path_buf.to_owned()));
 
-      info!("Dropped: {:?}", path_buf);
+      debug!("Dropped: {:?}", path_buf);
     }
   }
 }
 
 fn load_scene(
-  mut commands: Commands,
-  mut events: EventReader<LoadSceneEvent>,
+  mut events: EventReader<LoadFileEvent>,
+  mut assets_loading: ResMut<AssetsLoading>,
   asset_server: Res<AssetServer>,
 ) {
   for event in events.iter().last() {
-    let LoadSceneEvent(path_buf) = event;
+    let LoadFileEvent(path_buf) = event;
 
-    commands.insert_resource(SceneHandle {
-      handle: asset_server.load(path_buf.to_owned()),
-      ..default()
-    });
+    let scene_handle: Handle<Scene> = asset_server.load(path_buf.to_owned());
+
+    assets_loading.0.push(scene_handle.clone_untyped());
   }
 }
 
-fn update_scene_handle(
-  maybe_scene_handle: Option<ResMut<SceneHandle>>,
-  asset_server: Res<AssetServer>,
-) {
-  if let Some(mut scene_handle) = maybe_scene_handle {
-    let load_state = AssetServer::get_load_state(&asset_server, scene_handle.handle.to_owned());
-
-    if load_state != scene_handle.load_state {
-      info!("{:?}", load_state);
-      scene_handle.load_state = load_state;
+fn check_assets_loading(mut assets_loading: ResMut<AssetsLoading>, asset_server: Res<AssetServer>) {
+  for (index, handle) in assets_loading.0.clone().iter().enumerate() {
+    match AssetServer::get_load_state(&asset_server, handle) {
+      // TODO: Make the logging more generic (warn + info logging together)
+      LoadState::Loaded => {
+        info!(
+          "{:?}: {:?}",
+          LoadState::Loaded,
+          AssetServer::get_handle_path(&asset_server, handle)
+            .unwrap_or("".into())
+            .path()
+        );
+        assets_loading.0.remove(index);
+      }
+      LoadState::Failed => {
+        warn!(
+          "{:?}: {:?}",
+          LoadState::Failed,
+          AssetServer::get_handle_path(&asset_server, handle)
+            .unwrap_or("".into())
+            .path()
+        );
+        assets_loading.0.remove(index);
+      }
+      _ => (),
+      // Other
+      // LoadState::Loading => (),
+      // LoadState::Unloaded => (),
+      // LoadState::NotLoaded => (),
     }
   }
 }
