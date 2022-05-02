@@ -9,4 +9,4 @@ edition = "2021"
 dev = ["bevy/dynamic"]
 
 [dependencies]
-bevy = { version = "0.7.0", features = ["jpeg"] }
+bevy = { git = "https://github.com/bevyengine/bevy.git", features = ["jpeg"] }
