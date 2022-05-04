@@ -10,7 +10,7 @@ impl Plugin for ConfigPlugin {
     app
       .insert_resource(LogSettings {
         #[cfg(feature = "debug")]
-        level: Level::INFO,
+        level: Level::DEBUG,
         ..default()
       })
       .insert_resource(WindowDescriptor {

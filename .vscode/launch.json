@@ -13,7 +13,7 @@
           "build",
           "--bin=scene_viewer",
           "--package=scene_viewer",
-          // "--features=dev"
+          "--features=debug"
         ],
         "filter": {
           "name": "scene_viewer",
@@ -33,7 +33,7 @@
           "--no-run",
           "--bin=scene_viewer",
           "--package=scene_viewer",
-          // "--features=dev"
+          "--features=debug"
         ],
         "filter": {
           "name": "scene_viewer",
